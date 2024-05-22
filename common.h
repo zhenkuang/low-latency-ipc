@@ -142,18 +142,46 @@ long crc32(const Message *message)
 
 #define RING_SIZE 1024
 
-// 环形缓冲区结构体
-struct RingBuffer {
-    const Message* data[RING_SIZE];
-    uint32_t head;
-    uint32_t tail;
-    sem_t sem;
-};
-
 void calculate_checksum(Message* message) {
     message->checksum = crc32(message);
 }
 
 void increment_first_byte(Message* message) {
     message->payload[0]++;
+}
+
+typedef struct {
+    const Message* data[RING_SIZE];
+    uint32_t head;
+    uint32_t tail;
+    uint32_t size;
+    sem_t sem;
+} RingBuffer;
+
+void ring_buffer_init(RingBuffer* rb, uint32_t size) {
+    rb->head = 0;
+    rb->tail = 0;
+    rb->size = size;
+    sem_init(&(rb->sem), 1, 1);  // 初始化信号量
+}
+
+bool ring_buffer_enqueue(RingBuffer* rb, const Message* message) {
+    uint32_t next_tail = (rb->tail + 1) % rb->size;
+    if (next_tail == rb->head) {
+        // 环形缓冲区已满
+        return false;
+    }
+    rb->data[rb->tail] = message;
+    rb->tail = next_tail;
+    return true;
+}
+
+const Message* ring_buffer_dequeue(RingBuffer* rb) {
+    if (rb->head == rb->tail) {
+        // 环形缓冲区为空
+        return nullptr;
+    }
+    const Message* message = rb->data[rb->head];
+    rb->head = (rb->head + 1) % rb->size;
+    return message;
 }
